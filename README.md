@@ -1,14 +1,30 @@
 # Backend Technical Assessment
 
-## Overview
+## Introduction
 
 This assessment covers the backend architecture of an immigration services platform — a multi-tenant, multi-channel system that manages visa applications, compliance tasks, and client communications at scale.
 
 The system coordinates data across three source-of-truth stores, serves five distinct platform consumers, and is expected to grow to 1M+ concurrent users. Understanding the data model, the boundaries between systems, and where coupling exists is essential before proposing changes or extensions.
 
+--- 
+
+## Your Task 📚
+
+Propose a unified, scalable data schema for PostgreSQL that could serve as the single source of truth for this system. The current state is a split across Firestore (accounts, AI review) and PostgreSQL (conversations), with denormalized JSON blobs, flat key maps, and no formal relational structure. Your job is to redesign this as a clean, normalized Postgres schema that:
+- Models users, services, documents, reviews, conversations, and all supporting entities as proper relational tables
+- Supports multiple concurrent services per user (visas, permits, compliance tasks) with a single extensible structure — not one schema per service type
+- Is designed to scale to 50k new users/month and 1M concurrent users, with the indexing and partitioning strategy to match
+- Preserves full audit history for documents, staff actions, and AI review runs
+- Is queryable by all five platform consumers with proper security to protect data without requiring denormalized copies or application-side joins for common access patterns
+- Leaves room for new service types, geographies, AI integrations, and compliance products without requiring schema migrations for each addition
+
+Your deliverable is a proposed schema: table definitions, relationships, key design decisions, and the rationale behind them. You should also identify any tradeoffs you are making and what you would validate with the team before finalizing.
+
+When finished, share the results of your work to aaron@issacompass.com (and cc recruiting.team@issacompass.com).
+
 ---
 
-## What the System Does
+## Overview of the System
 
 Clients use the platform to get help with immigration and compliance work: visa applications, work permits, 90-day reporting, address updates, arrival cards, marriage permits, taxes, and more. They upload documents, receive feedback from staff and AI, and track their progress through each service. Meanwhile, the business team is simultaneously managing client conversations coming in from Instagram, TikTok, WhatsApp, and other channels.
 
@@ -163,7 +179,7 @@ Scheduled job (e.g. SLA audit)
 
 The following are known gaps in the current data sample that the assessment should address:
 
-- **Payment records** — `payment` is always `{}` in observed data. Payment state, Stripe integration, and refund logic are not yet represented.
+- **Payment records** — Payment state, Stripe integration, and refund logic are not yet represented.
 - **Multi-visa / multi-service data model** — The current schema is DTV-centric. Extension to support concurrent services for one user is a primary design challenge.
 - **Notification system** — `expo_token` exists for iOS push, but the full notification dispatch pipeline is not modeled.
 - **Audit logging** — Staff actions in `docs.history` provide partial audit coverage, but a system-wide audit log for compliance purposes is not present.
