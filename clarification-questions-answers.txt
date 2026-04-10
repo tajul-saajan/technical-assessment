@@ -1,0 +1,71 @@
+1. Can a single user have two active services of the same type running at the same time?
+
+The case I'm thinking about: a DTV renewal kicked off while the original application is still in progress, or a family where the account holder is applying for DTV for themselves and their spouse at the same time. I've assumed this is possible, so there's no uniqueness constraint tying an account to a single instance of each service type. If it's actually not allowed, adding that constraint at the database level would simplify a few things.
+
+---
+
+2. Is it always one payment per service, or are there cases where a service could have more than one?
+
+Thinking about failed payment retries, or any kind of deposit/instalment setup. If retries happen, a strict one-payment-per-service rule breaks on the first failed charge. I've gone with a safer default in the proposal, but if one payment per service is a hard rule on the product side, I'd rather enforce that at the database level cleanly.
+
+---
+
+3. On Stripe — are you using PaymentIntents, Checkout Sessions, Subscriptions, or a mix?
+
+The payment URLs in the data look like Checkout Session links, so I've modelled payments as one-off transactions. If Subscriptions are involved for any service type, the payments model looks quite different — recurring billing means multiple rows over time rather than one per service.
+
+---
+
+4. For 90-day reporting — does each reporting cycle create a new application, or is there one persistent record per user that repeats?
+
+If every cycle is a fresh submission, a long-term resident ends up with a lot of rows and that needs to be accounted for. If it's a single record with a recurring job behind it, the data model and the workflow logic are different. I've left this open for now.
+
+---
+
+5. What happens when a client uploads a new file for a document that's already been approved?
+
+Does the approval get revoked and it goes back into the review queue? Or does the new file sit there until a staff member decides to look at it? This determines whether document status is mutable (staff can reopen an approval) or whether a new upload always triggers a fresh review cycle.
+
+---
+
+6. Is the migration planned as a hard cutover, or will there be a period where Firestore and PostgreSQL are both live?
+
+This is probably the question with the biggest impact on the actual migration work. Keeping both in sync during a transition means every write path needs to fan out to two places, and they can drift if anything is missed. A cutover with a backfill and a maintenance window is simpler to reason about but has a different risk profile. Either is workable — I just want to design the migration approach around whichever direction you're leaning.
+
+---
+
+7. Is zero downtime a requirement during the migration, or is a short maintenance window acceptable?
+
+Zero downtime is doable but adds meaningful complexity, especially for the Firestore-to-PostgreSQL data extraction. If there's a window where the app can be briefly unavailable, the migration is a lot more straightforward.
+
+---
+
+8. Does PDPA apply here alongside GDPR?
+
+I know GDPR tends to get most of the attention, but since the platform is based in Thailand and primarily serves Thai users, PDPA is likely in scope too — and the two aren't identical in how they handle data subject requests and cross-border transfers. If both apply, the deletion workflow and audit log retention need to satisfy both at once. I've designed around GDPR-style hard delete with audit anonymisation, but I'd want to check whether PDPA changes any of that before treating the compliance side as done.
+
+---
+
+9. When a user requests account deletion, do the audit log entries about them also get deleted, or are those retained?
+
+I've gone with anonymising audit rows (replacing identifiers with [deleted]) rather than deleting them, on the basis that an immigration platform probably has a legitimate reason to keep audit records even after an account is closed. But that's an assumption that really needs a legal sign-off, not an engineering call.
+
+---
+
+10. If a user has both a DTV application and a work permit active, and both need a passport — are those treated as two separate document uploads, one per service?
+
+I've modelled it that way: each document belongs to its service, so the passport for the DTV is independent from the passport for the work permit. It's the simpler model and keeps service lifecycles from sharing state. But if the idea is that one approved passport should carry over across services, the structure needs to change. Good to confirm before the document model is locked in.
+
+
+## Answers:
+
+1. Yes, this includes dependents such as a spouse or children on the same visa type
+2. There can be multiple payments per service. This could include a mix such as cash and Stripe
+3. Please assume one-time payments for now. We do have some subscription-based products
+4. This should be treated as a persistent record
+5. Great question! This is not something that happens on the frontend but you can assume it might happen for record-keeping purposes. In that case, the new file is appended under the approved list
+6. A cutover with backfill works for us
+7. Brief downtime is acceptable
+8. Yes, PDPA apply here alongside GDPR
+9. Your assumption makes sense
+10. We are happy to proceed with your proposed approach.
